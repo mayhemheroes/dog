@@ -1,22 +1,18 @@
-FROM ubuntu:20.04 as builder
+FROM rust as build
 
-## Install build dependencies.
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y cmake clang curl pkg-config libssl1.1 ca-certificates
-RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-RUN ${HOME}/.cargo/bin/rustup default nightly
-RUN ${HOME}/.cargo/bin/cargo install -f cargo-fuzz
+WORKDIR /build
+COPY /src /build/src
+COPY /dns /build/dns
+COPY /dns-transport /build/dns-transport
+COPY /man /build/man
+COPY build.rs Cargo.toml /build/
 
-## Add source code to the build stage.
-ADD . /dog
-WORKDIR /dog/dns/fuzz
-RUN ${HOME}/.cargo/bin/cargo fuzz build
+RUN cargo build --release
 
-#RUN cd fuzz && ${HOME}/.cargo/bin/cargo fuzz build
-
-# Package Stage
-FROM ubuntu:20.04
+FROM debian:buster-slim
 
 RUN apt update && apt install -y libssl1.1 ca-certificates && apt clean all
 
-COPY --from=builder /dog/dns/fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_parsing /fuzz_parsing
+COPY --from=build /build/target/release/dog /dog
+
+ENTRYPOINT ["/dog"]
